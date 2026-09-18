@@ -1,0 +1,184 @@
+name: Salesforce PMD
+description: >-
+  Runs PMD over the Apex a change touched and fails only on violations the
+  change introduced, reporting into a shared pull request comment.
+author: Malyavi
+
+branding:
+  icon: filter
+  color: blue
+
+inputs:
+  source-dirs:
+    description: >-
+      Directories holding the Apex to analyze, comma- or newline-separated.
+      A path outside them is ignored even when it is Apex, which is what keeps
+      a vendored or generated tree out of the scan.
+    required: false
+    default: force-app
+  extensions:
+    description: File extensions to treat as Apex, without the dot.
+    required: false
+    default: cls,trigger
+  ruleset:
+    description: >-
+      Ruleset to apply — a path in the repository, or one of PMD's own built-in
+      rulesets. The default is PMD's Apex quickstart set.
+    required: false
+    default: rulesets/apex/quickstart.xml
+  config-paths:
+    description: >-
+      Extra paths whose change makes a full informational scan worth running
+      even though no Apex moved, as globs (`*`, `**`, `?`). The ruleset counts
+      as one of these whether or not it is listed.
+    required: false
+    default: ''
+  mode:
+    description: >-
+      `auto` ratchets against the base branch when there is one and falls back
+      to a full informational scan when there is not; `diff` insists on the
+      ratchet; `full` always scans the source directories whole and never fails.
+    required: false
+    default: auto
+  base-ref:
+    description: >-
+      Ref the ratchet compares against. Defaults to `origin/<the pull request's
+      base branch>`. The branch tip rather than the merge base on purpose — see
+      the README.
+    required: false
+    default: ''
+  fail-on-new:
+    description: >-
+      Whether a new violation fails the run. With this off the findings are
+      still reported, which is how a repository adopts the check before it
+      enforces it.
+    required: false
+    default: 'true'
+  pmd-version:
+    description: PMD version to download. Pinned so a new rule cannot arrive as somebody's new violations.
+    required: false
+    default: 7.27.0
+  pmd-download-url:
+    description: >-
+      Where to fetch the PMD distribution zip from, for a runner that cannot
+      reach GitHub releases. Must hold the official layout.
+    required: false
+    default: ''
+  pmd-args:
+    description: Extra arguments for `pmd check`, for example `--minimum-priority 3`.
+    required: false
+    default: ''
+  max-listed:
+    description: New violations listed in the comment before collapsing into a count.
+    required: false
+    default: '20'
+  label:
+    description: >-
+      How the check is named in every message it writes. Set it to the job's
+      name so a reader can find the log the report came from.
+    required: false
+    default: PMD (Apex)
+  working-directory:
+    description: Directory to run in, for a repository whose project is not at its root.
+    required: false
+    default: '.'
+  comment:
+    description: Whether to write the shared pull request comment at all.
+    required: false
+    default: 'true'
+  comment-section:
+    description: Section of the shared comment this action owns.
+    required: false
+    default: pmd
+  comment-tag:
+    description: >-
+      HTML comment identifying the shared status comment. Several actions
+      reporting into one comment must be given the same tag.
+    required: false
+    default: '<!-- pr-status-comment -->'
+  comment-section-order:
+    description: >-
+      Fixed rendering order for the comment's sections, comma-separated. A
+      section not listed renders after the listed ones.
+    required: false
+    default: ''
+  pr-number:
+    description: Pull request to comment on. Read from the event payload when unset.
+    required: false
+    default: ''
+  github-token:
+    description: Token used to read and write the pull request comment.
+    required: false
+    default: ${{ github.token }}
+  setup-java:
+    description: >-
+      Whether to install a JDK. PMD needs one; turn this off when the job has
+      already set one up.
+    required: false
+    default: 'true'
+  java-version:
+    description: JDK version to install.
+    required: false
+    default: '21'
+  java-distribution:
+    description: JDK distribution to install.
+    required: false
+    default: temurin
+
+outputs:
+  outcome:
+    description: '`passed`, `failed` or `skipped`.'
+    value: ${{ steps.pmd.outputs.outcome }}
+  new-violations:
+    description: Violations the change introduced.
+    value: ${{ steps.pmd.outputs.new-violations }}
+  preexisting-violations:
+    description: Violations in the touched files that predate the change.
+    value: ${{ steps.pmd.outputs.preexisting-violations }}
+  files-analyzed:
+    description: How many files the ratchet compared.
+    value: ${{ steps.pmd.outputs.files-analyzed }}
+  report-path:
+    description: Path to PMD's own JSON report for the head scan.
+    value: ${{ steps.pmd.outputs.report-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up the JDK for PMD
+      if: ${{ inputs.setup-java == 'true' }}
+      uses: actions/setup-java@v5
+      with:
+        distribution: ${{ inputs.java-distribution }}
+        java-version: ${{ inputs.java-version }}
+
+    - name: Run PMD over the changed Apex
+      id: pmd
+      shell: bash
+      env:
+        # A composite action does not populate INPUT_* for its own run steps,
+        # so every input is mapped here and read through lib/inputs.mjs.
+        INPUT_SOURCE_DIRS: ${{ inputs.source-dirs }}
+        INPUT_EXTENSIONS: ${{ inputs.extensions }}
+        INPUT_RULESET: ${{ inputs.ruleset }}
+        INPUT_CONFIG_PATHS: ${{ inputs.config-paths }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_FAIL_ON_NEW: ${{ inputs.fail-on-new }}
+        INPUT_PMD_VERSION: ${{ inputs.pmd-version }}
+        INPUT_PMD_DOWNLOAD_URL: ${{ inputs.pmd-download-url }}
+        INPUT_PMD_ARGS: ${{ inputs.pmd-args }}
+        INPUT_MAX_LISTED: ${{ inputs.max-listed }}
+        INPUT_LABEL: ${{ inputs.label }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_COMMENT_SECTION: ${{ inputs.comment-section }}
+        INPUT_COMMENT_TAG: ${{ inputs.comment-tag }}
+        INPUT_COMMENT_SECTION_ORDER: ${{ inputs.comment-section-order }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      # The script runs from the action's own checkout and is handed the
+      # caller's directory as an input rather than through the step's
+      # `working-directory`: it threads that directory into every git and PMD
+      # call itself, and one mechanism for it is one place to get it wrong.
+      run: node "$GITHUB_ACTION_PATH/scripts/run-pmd.mjs"
