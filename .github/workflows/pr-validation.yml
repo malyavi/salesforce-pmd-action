@@ -10,7 +10,10 @@ name: PR Validation
 # throwaway repository built by test/fixtures/setup.sh, which holds one
 # violation on its base branch and two on its head, and asserts that the
 # ratchet reports exactly one new violation. Nothing but running the real thing
-# proves the PMD download, the two scans and the git reads still line up.
+# proves the PMD download, the two scans and the git reads still line up. It
+# also runs the action over a change that touches no Apex at all, because the
+# default names no extensions and what PMD does with a file it has no language
+# for is not something the unit suite can answer.
 on:
   pull_request:
     branches:
@@ -87,7 +90,7 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           [ "$NEW" = "1" ] || fail "Expected exactly 1 new violation, got '$NEW'. The fixture adds one empty catch block to a file that already had one, so anything else means the ratchet is counting the inherited violation too, or missing the new one."
           [ "$PREEXISTING" = "1" ] || fail "Expected 1 pre-existing violation, got '$PREEXISTING'."
-          [ "$FILES" = "1" ] || fail "Expected 1 analyzed file, got '$FILES'."
+          [ "$FILES" = "2" ] || fail "Expected 2 changed files handed to the scanner — the Apex and the flow beside it, since the default narrows by nothing — got '$FILES'."
           [ "$OUTCOME" = "passed" ] || fail "With fail-on-new off the outcome should be 'passed', got '$OUTCOME'."
 
       # The same fixture with the ratchet armed, to prove a new violation does
@@ -111,3 +114,34 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           [ "${{ steps.armed.outcome }}" = "failure" ] || fail "A new violation must fail the step; it reported '${{ steps.armed.outcome }}'."
           [ "${{ steps.armed.outputs.outcome }}" = "failed" ] || fail "The action's own outcome output should be 'failed', got '${{ steps.armed.outputs.outcome }}'."
+
+      # The reason `extensions` is empty by default: a change that touches no
+      # Apex is still a change worth looking at, so the action runs rather than
+      # skipping, and PMD is left to skip the file it has no language for. An
+      # `outcome` of `skipped` here would be the old extension filter back. The
+      # action diffs `base-ref..HEAD`, so the branch is what selects the change.
+      - name: Point the fixture at the change that touches no Apex
+        run: git -C "${{ runner.temp }}/fixture" checkout --quiet metadata-only
+
+      - name: Run the action over it
+        id: metadata
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/fixture
+          base-ref: base
+          ruleset: config/ruleset.xml
+          source-dirs: force-app
+          comment: 'false'
+          setup-java: 'false'
+
+      - name: Check that it scanned rather than skipping
+        env:
+          OUTCOME: ${{ steps.metadata.outputs.outcome }}
+          NEW: ${{ steps.metadata.outputs.new-violations }}
+          FILES: ${{ steps.metadata.outputs.files-analyzed }}
+        run: |
+          echo "outcome=$OUTCOME new=$NEW files=$FILES"
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$OUTCOME" = "passed" ] || fail "A flow-only change must still be scanned; the outcome was '$OUTCOME', and 'skipped' means the extension filter is back."
+          [ "$FILES" = "1" ] || fail "Expected the flow to be the 1 file handed to the scanner, got '$FILES'."
+          [ "$NEW" = "0" ] || fail "PMD has no language for a flow, so it can report no violations in one; got '$NEW'."

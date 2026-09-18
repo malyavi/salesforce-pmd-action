@@ -27,7 +27,7 @@ knob you probably do not need.
 
 ## What a run does
 
-1. Diffs the base branch against `HEAD` and splits the result into Apex the
+1. Diffs the base branch against `HEAD` and splits the result into source the
    scan covers and configuration whose change makes a scan worth running.
 2. Downloads the pinned PMD release (once per job; a second call in the same job
    reuses it).
@@ -41,6 +41,24 @@ With no base branch to compare against — a push, a workflow dispatch — it ru
 **full informational scan** instead: every finding is reported and nothing
 fails, because there is nothing to attribute. The same happens when only the
 configuration changed, which is how a ruleset edit proves it still parses.
+
+## Why no extension filter by default
+
+`extensions` is empty, so **any** change under `source-dirs` runs a scan. A
+source directory holds far more than Apex, a change to any of it is a change
+worth looking at, and PMD already skips a file whose extension names no language
+it knows — so the filter buys nothing except the chance of forgetting something.
+An action that scanned only `.cls` and `.trigger` would quietly report *nothing*
+for a pull request that moved a trigger's logic into a flow.
+
+Set it when the scan is genuinely expensive and you know what you want looked
+at:
+
+```yaml
+- uses: malyavi/salesforce-pmd-action@v1
+  with:
+    extensions: cls,trigger
+```
 
 ## Why the branch tip rather than the merge base
 
@@ -71,8 +89,8 @@ pair rather than provably the new one, which the comment says in as many words.
 
 | Input | Default | What it does |
 | --- | --- | --- |
-| `source-dirs` | `force-app` | Directories holding the Apex to analyze, comma- or newline-separated. Apex outside them is ignored, which is what keeps a sample or vendored tree out of the scan. |
-| `extensions` | `cls,trigger` | Extensions treated as Apex, without the dot. |
+| `source-dirs` | `force-app` | Directories holding the source to analyze, comma- or newline-separated. A path outside them is ignored, which is what keeps a sample or vendored tree out of the scan. |
+| `extensions` | — | Optional narrowing filter: extensions, without the dot, to restrict the scan to. Empty runs it on any change under `source-dirs`. |
 | `ruleset` | `rulesets/apex/quickstart.xml` | A path in the repository, or one of PMD's built-in rulesets. |
 | `config-paths` | — | Extra paths whose change triggers a full informational scan, as globs (`*`, `**`, `?`). The ruleset always counts as one. |
 | `mode` | `auto` | `auto` ratchets when there is a base branch and scans fully when there is not; `diff` insists on the ratchet and fails if it cannot; `full` always scans whole and never fails. |
@@ -86,7 +104,7 @@ pair rather than provably the new one, which the comment says in as many words.
 | `working-directory` | `.` | For a repository whose project is not at its root. |
 | `comment` | `true` | Whether to write the pull request comment at all. |
 | `comment-section` | `pmd` | The section of the shared comment this action owns. |
-| `comment-tag` | `<!-- pr-status-comment -->` | Identifies the shared comment. Give every action reporting into one comment the same tag. |
+| `comment-tag` | `<!-- malyavi-pr-status-comment -->` | Identifies the shared comment. Give every action reporting into one comment the same tag. |
 | `comment-section-order` | — | Fixed rendering order for the sections, comma-separated. Unlisted sections render last. |
 | `pr-number` | from the event | The pull request to comment on. |
 | `github-token` | `github.token` | Used to read and write the comment. |

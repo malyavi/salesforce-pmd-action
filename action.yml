@@ -11,15 +11,19 @@ branding:
 inputs:
   source-dirs:
     description: >-
-      Directories holding the Apex to analyze, comma- or newline-separated.
+      Directories holding the source to analyze, comma- or newline-separated.
       A path outside them is ignored even when it is Apex, which is what keeps
       a vendored or generated tree out of the scan.
     required: false
     default: force-app
   extensions:
-    description: File extensions to treat as Apex, without the dot.
+    description: >-
+      Optional narrowing filter: extensions, without the dot, to restrict the
+      scan to. Empty by default, so any change under `source-dirs` runs the
+      scan and PMD decides what it can parse — a filter guessed here is one
+      that silently drops whatever it did not think of.
     required: false
-    default: cls,trigger
+    default: ''
   ruleset:
     description: >-
       Ruleset to apply — a path in the repository, or one of PMD's own built-in
@@ -29,8 +33,8 @@ inputs:
   config-paths:
     description: >-
       Extra paths whose change makes a full informational scan worth running
-      even though no Apex moved, as globs (`*`, `**`, `?`). The ruleset counts
-      as one of these whether or not it is listed.
+      even though nothing under `source-dirs` moved, as globs (`*`, `**`, `?`).
+      The ruleset counts as one of these whether or not it is listed.
     required: false
     default: ''
   mode:
@@ -95,7 +99,7 @@ inputs:
       HTML comment identifying the shared status comment. Several actions
       reporting into one comment must be given the same tag.
     required: false
-    default: '<!-- pr-status-comment -->'
+    default: '<!-- malyavi-pr-status-comment -->'
   comment-section-order:
     description: >-
       Fixed rendering order for the comment's sections, comma-separated. A
@@ -136,7 +140,7 @@ outputs:
     description: Violations in the touched files that predate the change.
     value: ${{ steps.pmd.outputs.preexisting-violations }}
   files-analyzed:
-    description: How many files the ratchet compared.
+    description: How many changed files the ratchet handed to the scanner.
     value: ${{ steps.pmd.outputs.files-analyzed }}
   report-path:
     description: Path to PMD's own JSON report for the head scan.
@@ -152,7 +156,7 @@ runs:
         distribution: ${{ inputs.java-distribution }}
         java-version: ${{ inputs.java-version }}
 
-    - name: Run PMD over the changed Apex
+    - name: Run PMD over the changed source
       id: pmd
       shell: bash
       env:

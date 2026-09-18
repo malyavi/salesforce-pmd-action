@@ -1,7 +1,7 @@
-import {afterEach, describe, it}          from 'node:test';
-import assert                              from 'node:assert/strict';
+import {afterEach, describe, it}                        from 'node:test';
+import assert                                           from 'node:assert/strict';
 import {MODES, planScan, resolveBaseRef, resolveConfig} from '../lib/config.mjs';
-import {ConfigError}                       from '../lib/inputs.mjs';
+import {ConfigError}                                    from '../lib/inputs.mjs';
 
 /**
  * What the action decides before it runs anything: which files count, what to
@@ -21,7 +21,7 @@ describe('resolveConfig', () => {
   it('defaults to a Salesforce DX layout with PMD\'s own quickstart ruleset', () => {
     const config = resolveConfig();
     assert.deepEqual(config.sourceDirs, ['force-app']);
-    assert.deepEqual(config.extensions, ['cls', 'trigger']);
+    assert.deepEqual(config.extensions, []);
     assert.equal(config.ruleset, 'rulesets/apex/quickstart.xml');
     assert.equal(config.mode, 'auto');
     assert.equal(config.failOnNew, true);
@@ -80,31 +80,31 @@ describe('planScan', () => {
 
   it('ratchets when Apex changed', () => {
     assert.deepEqual(
-      planScan(withBase, {apexFiles: ['A.cls'], configFiles: []}).scan,
+      planScan(withBase, {sourceFiles: ['A.cls'], configFiles: []}).scan,
       'diff'
     );
   });
 
   it('scans everything when only the configuration changed', () => {
-    const plan = planScan(withBase, {apexFiles: [], configFiles: ['config/pmd-ruleset.xml']});
+    const plan = planScan(withBase, {sourceFiles: [], configFiles: ['config/pmd-ruleset.xml']});
     assert.equal(plan.scan, 'full');
     // The value of this run is proving the new ruleset parses and executes.
     assert.match(plan.reason, /configuration changed/);
   });
 
   it('does nothing when neither changed', () => {
-    assert.equal(planScan(withBase, {apexFiles: [], configFiles: []}).scan, 'none');
+    assert.equal(planScan(withBase, {sourceFiles: [], configFiles: []}).scan, 'none');
   });
 
   it('falls back to a full scan when there is no base to compare against', () => {
-    const plan = planScan({mode: 'auto', baseRef: ''}, {apexFiles: ['A.cls'], configFiles: []});
+    const plan = planScan({mode: 'auto', baseRef: ''}, {sourceFiles: ['A.cls'], configFiles: []});
     assert.equal(plan.scan, 'full');
     assert.match(plan.reason, /no base branch/);
   });
 
   it('refuses mode: diff with no base, rather than quietly scanning everything', () => {
     assert.throws(
-      () => planScan({mode: 'diff', baseRef: ''}, {apexFiles: ['A.cls'], configFiles: []}),
+      () => planScan({mode: 'diff', baseRef: ''}, {sourceFiles: ['A.cls'], configFiles: []}),
       (thrown) => {
         assert.ok(thrown instanceof ConfigError);
         assert.match(thrown.message, /`base-ref`/);
@@ -114,6 +114,6 @@ describe('planScan', () => {
   });
 
   it('honours mode: full even when nothing changed at all', () => {
-    assert.equal(planScan({mode: 'full', baseRef: ''}, {apexFiles: [], configFiles: []}).scan, 'full');
+    assert.equal(planScan({mode: 'full', baseRef: ''}, {sourceFiles: [], configFiles: []}).scan, 'full');
   });
 });

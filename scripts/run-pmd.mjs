@@ -1,25 +1,19 @@
-import {existsSync}                  from 'node:fs';
-import {classifyChanges, isApexSource} from '../lib/apex.mjs';
-import {commentConfig, updateCommentSection} from '../lib/comment.mjs';
-import {planScan, resolveConfig}      from '../lib/config.mjs';
-import {error, setOutput, summary, warn} from '../lib/core.mjs';
-import {changedPaths}                 from '../lib/exec.mjs';
-import {failureMessage}               from '../lib/inputs.mjs';
-import {
-  installPmd,
-  renamedPaths,
-  scanBaseVersions,
-  scanDirectories,
-  scanFiles
-}                                     from '../lib/pmd.mjs';
+import {existsSync}                                                             from 'node:fs';
+import {classifyChanges, isScannedPath}                                         from '../lib/apex.mjs';
+import {commentConfig, updateCommentSection}                                    from '../lib/comment.mjs';
+import {planScan, resolveConfig}                                                from '../lib/config.mjs';
+import {error, setOutput, summary, warn}                                        from '../lib/core.mjs';
+import {changedPaths}                                                           from '../lib/exec.mjs';
+import {failureMessage}                                                         from '../lib/inputs.mjs';
+import {installPmd, renamedPaths, scanBaseVersions, scanDirectories, scanFiles} from '../lib/pmd.mjs';
 import {
   renderComment,
   renderFullScanComment,
   renderFullScanSummary,
   renderNothingToDo,
   renderSummary
-}                                     from '../lib/report.mjs';
-import {compareScans}                 from '../lib/ratchet.mjs';
+}                                                                               from '../lib/report.mjs';
+import {compareScans}                                                           from '../lib/ratchet.mjs';
 
 /**
  * Runs PMD over what a change touched and reports it: as this job's verdict, as
@@ -60,7 +54,7 @@ async function main() {
     await fullScan(pmdBin, config, comment, plan.reason);
     return;
   }
-  await diffAwareScan(pmdBin, config, comment, changes.apexFiles);
+  await diffAwareScan(pmdBin, config, comment, changes.sourceFiles);
 }
 
 /**
@@ -70,26 +64,26 @@ async function main() {
  * @param {string} pmdBin Path to the PMD executable
  * @param {object} config Resolved configuration
  * @param {object} comment Comment configuration
- * @param {string[]} apexFiles Repository-relative changed source files
+ * @param {string[]} sourceFiles Repository-relative changed source files
  * @return {Promise<void>}
  */
-async function diffAwareScan(pmdBin, config, comment, apexFiles) {
-  console.log(`Analyzing ${apexFiles.length} changed file(s) against ${config.baseRef}.`);
+async function diffAwareScan(pmdBin, config, comment, sourceFiles) {
+  console.log(`Analyzing ${sourceFiles.length} changed file(s) against ${config.baseRef}.`);
 
-  const head = await scanFiles(pmdBin, apexFiles, 'head', config);
+  const head = await scanFiles(pmdBin, sourceFiles, 'head', config);
   const renames = await renamedPaths(
     config.baseRef,
-    (path) => isApexSource(path, config.sourceDirs, config.extensions),
+    (path) => isScannedPath(path, config.sourceDirs, config.extensions),
     {cwd: config.cwd}
   );
-  const base = await scanBaseVersions(pmdBin, apexFiles, {...config, renames});
+  const base = await scanBaseVersions(pmdBin, sourceFiles, {...config, renames});
 
   const {gained, newTotal, preexisting, baseCounts} = compareScans(head.violations, base.violations);
 
   reportProcessingErrors([...head.processingErrors, ...base.processingErrors]);
   await updateCommentSection(config.section, renderComment({
     label: config.label,
-    fileCount: apexFiles.length,
+    fileCount: sourceFiles.length,
     gained,
     newTotal,
     preexisting,
@@ -109,7 +103,7 @@ async function diffAwareScan(pmdBin, config, comment, apexFiles) {
     outcome: newTotal > 0 && config.failOnNew ? 'failed' : 'passed',
     newViolations: newTotal,
     preexisting,
-    files: apexFiles.length,
+    files: sourceFiles.length,
     reportPath: head.reportPath
   });
 

@@ -1,13 +1,13 @@
 import {describe, it} from 'node:test';
-import assert          from 'node:assert/strict';
-import {compareScans}  from '../lib/ratchet.mjs';
+import assert         from 'node:assert/strict';
+import {compareScans} from '../lib/ratchet.mjs';
 import {
   renderComment,
   renderFullScanComment,
   renderFullScanSummary,
   renderNothingToDo,
   renderSummary
-}                      from '../lib/report.mjs';
+}                     from '../lib/report.mjs';
 
 /**
  * What a reader is told. A report that says the wrong thing about a passing run
@@ -141,6 +141,9 @@ describe('renderFullScanSummary', () => {
 
 describe('renderNothingToDo', () => {
   it('passes with a line that names the check', () => {
-    assert.equal(renderNothingToDo('PMD (Apex)'), ':white_check_mark: **PMD (Apex)**: no analyzable changes.');
+    assert.equal(
+      renderNothingToDo('PMD (Apex)'),
+      ':white_check_mark: **PMD (Apex)**: no changes in the scanned paths.'
+    );
   });
 });
