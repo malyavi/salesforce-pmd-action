@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A file PMD has no language for, which is the point of it: the action's default
+  covers every change under the source directories, so this has to be handed to
+  the scanner, skipped by it, and reported as neither a violation nor an error.
+-->
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Smoke</label>
+    <processType>AutoLaunchedFlow</processType>
+    <status>Active</status>
+</Flow>

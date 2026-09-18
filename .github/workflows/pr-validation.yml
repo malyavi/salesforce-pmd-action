@@ -1,0 +1,146 @@
+name: PR Validation
+
+# Two jobs, and they answer different questions.
+#
+# `tests` asks whether the logic is right: the unit suite over the pure modules,
+# plus the checks that action.yml still parses and still maps every input it
+# declares. That last one is the defect this repository is most likely to ship.
+#
+# `smoke` asks whether the action *works* — it runs `uses: ./` against a
+# throwaway repository built by test/fixtures/setup.sh, which holds one
+# violation on its base branch and two on its head, and asserts that the
+# ratchet reports exactly one new violation. Nothing but running the real thing
+# proves the PMD download, the two scans and the git reads still line up. It
+# also runs the action over a change that touches nothing the default
+# extensions cover, which has to skip rather than spend a Java download on
+# being told that a flow holds no Apex.
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Check that action.yml parses
+        run: |
+          pip install --quiet --disable-pip-version-check pyyaml
+          python3 test/check-action-yaml.py
+
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Build the fixture repository
+        run: test/fixtures/setup.sh "${{ runner.temp }}/fixture"
+
+      # `comment: false` because there is nothing to comment on: this job also
+      # runs on a push, and the point here is the analysis rather than the
+      # reporting, which the unit tests cover line by line.
+      - name: Run the action against the fixture
+        id: pmd
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/fixture
+          base-ref: base
+          ruleset: config/ruleset.xml
+          source-dirs: force-app
+          comment: 'false'
+          # The fixture gains a violation on purpose, so a failing run is the
+          # expected outcome; the assertion below is what decides this job.
+          fail-on-new: 'false'
+
+      - name: Check what the ratchet reported
+        env:
+          OUTCOME: ${{ steps.pmd.outputs.outcome }}
+          NEW: ${{ steps.pmd.outputs.new-violations }}
+          PREEXISTING: ${{ steps.pmd.outputs.preexisting-violations }}
+          FILES: ${{ steps.pmd.outputs.files-analyzed }}
+        run: |
+          echo "outcome=$OUTCOME new=$NEW preexisting=$PREEXISTING files=$FILES"
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$NEW" = "1" ] || fail "Expected exactly 1 new violation, got '$NEW'. The fixture adds one empty catch block to a file that already had one, so anything else means the ratchet is counting the inherited violation too, or missing the new one."
+          [ "$PREEXISTING" = "1" ] || fail "Expected 1 pre-existing violation, got '$PREEXISTING'."
+          [ "$FILES" = "1" ] || fail "Expected 1 analyzed file: the change also edits a flow, and the default extensions must keep it away from the scanner. Got '$FILES'."
+          [ "$OUTCOME" = "passed" ] || fail "With fail-on-new off the outcome should be 'passed', got '$OUTCOME'."
+
+      # The same fixture with the ratchet armed, to prove a new violation does
+      # fail a run. `continue-on-error` keeps the job green when the step goes
+      # red, which is the outcome being asserted.
+      - name: Run the action again with the ratchet armed
+        id: armed
+        uses: ./
+        continue-on-error: true
+        with:
+          working-directory: ${{ runner.temp }}/fixture
+          base-ref: base
+          ruleset: config/ruleset.xml
+          source-dirs: force-app
+          comment: 'false'
+          fail-on-new: 'true'
+          setup-java: 'false'
+
+      - name: Check that a new violation fails the run
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ "${{ steps.armed.outcome }}" = "failure" ] || fail "A new violation must fail the step; it reported '${{ steps.armed.outcome }}'."
+          [ "${{ steps.armed.outputs.outcome }}" = "failed" ] || fail "The action's own outcome output should be 'failed', got '${{ steps.armed.outputs.outcome }}'."
+
+      # The other half of the extension filter: a change holding nothing the
+      # default covers has to skip. PMD has no language for a flow, so a run
+      # here could only download a JVM to report nothing. The action diffs
+      # `base-ref..HEAD`, so the branch is what selects the change.
+      - name: Point the fixture at the change that touches no Apex
+        run: git -C "${{ runner.temp }}/fixture" checkout --quiet metadata-only
+
+      - name: Run the action over it
+        id: metadata
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/fixture
+          base-ref: base
+          ruleset: config/ruleset.xml
+          source-dirs: force-app
+          comment: 'false'
+          setup-java: 'false'
+
+      - name: Check that it skipped rather than scanning
+        env:
+          OUTCOME: ${{ steps.metadata.outputs.outcome }}
+          NEW: ${{ steps.metadata.outputs.new-violations }}
+          FILES: ${{ steps.metadata.outputs.files-analyzed }}
+        run: |
+          echo "outcome=$OUTCOME new=$NEW files=$FILES"
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$OUTCOME" = "skipped" ] || fail "A change holding nothing the default extensions cover must skip; the outcome was '$OUTCOME'."
+          [ "$FILES" = "0" ] || fail "A skipped run analyzes nothing, so files-analyzed should be 0; got '$FILES'."
+          [ "$NEW" = "0" ] || fail "A skipped run reports no new violations; got '$NEW'."
