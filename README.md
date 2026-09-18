@@ -42,22 +42,39 @@ With no base branch to compare against — a push, a workflow dispatch — it ru
 fails, because there is nothing to attribute. The same happens when only the
 configuration changed, which is how a ruleset edit proves it still parses.
 
-## Why no extension filter by default
+## What it scans, and what it leaves alone
 
-`extensions` is empty, so **any** change under `source-dirs` runs a scan. A
-source directory holds far more than Apex, a change to any of it is a change
-worth looking at, and PMD already skips a file whose extension names no language
-it knows — so the filter buys nothing except the chance of forgetting something.
-An action that scanned only `.cls` and `.trigger` would quietly report *nothing*
-for a pull request that moved a trigger's logic into a flow.
+`extensions` defaults to `cls,trigger,page,component` — what PMD has a
+Salesforce language for, taken from the distribution rather than assumed:
 
-Set it when the scan is genuinely expensive and you know what you want looked
-at:
+| | PMD language | In the default |
+| --- | --- | --- |
+| `.cls`, `.trigger` | Apex | **yes** — and every rule in the default ruleset |
+| `.page`, `.component` | Visualforce, with its own rule categories including `category/visualforce/security.xml` | **yes** |
+| `.cmp`, `.app`, `.evt` (Aura) | none | no |
+| `.email` (email templates) | none | no |
+| `.js` (LWC) | Ecmascript — but its parser predates ES6 | no |
+| `.html` (LWC), `.xml` | HTML and XML — rules about web pages, Maven and WSDL | no |
+
+Aura bundles and email templates are not a judgement call: PMD maps them to no
+language, and answers a file list holding only those with *"No files to
+analyze"*. LWC is: PMD does read `.js`, but an LWC module comes back as four
+parse errors (`identifier is a reserved word: import`) and then a violation
+invented from the wreckage — worse than not looking.
+
+Visualforce earns its place even though the default Apex ruleset holds no rule
+that fires on a page. It costs nothing until you add the Visualforce categories,
+and a caller who adds them should not then have to discover a filter that was
+quietly excluding the files.
+
+Clear the filter if your ruleset reaches further than that list does — every
+changed file under `source-dirs` is then handed to PMD, which skips what it
+cannot read:
 
 ```yaml
 - uses: malyavi/salesforce-pmd-action@v1
   with:
-    extensions: cls,trigger
+    extensions: ''
 ```
 
 ## Why the branch tip rather than the merge base
@@ -90,7 +107,7 @@ pair rather than provably the new one, which the comment says in as many words.
 | Input | Default | What it does |
 | --- | --- | --- |
 | `source-dirs` | `force-app` | Directories holding the source to analyze, comma- or newline-separated. A path outside them is ignored, which is what keeps a sample or vendored tree out of the scan. |
-| `extensions` | — | Optional narrowing filter: extensions, without the dot, to restrict the scan to. Empty runs it on any change under `source-dirs`. |
+| `extensions` | `cls,trigger,page,component` | Extensions the scan covers, without the dot — what PMD has a Salesforce language for. Empty clears the filter. |
 | `ruleset` | `rulesets/apex/quickstart.xml` | A path in the repository, or one of PMD's built-in rulesets. |
 | `config-paths` | — | Extra paths whose change triggers a full informational scan, as globs (`*`, `**`, `?`). The ruleset always counts as one. |
 | `mode` | `auto` | `auto` ratchets when there is a base branch and scans fully when there is not; `diff` insists on the ratchet and fails if it cannot; `full` always scans whole and never fails. |

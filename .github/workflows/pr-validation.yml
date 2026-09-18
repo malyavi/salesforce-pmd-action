@@ -11,9 +11,9 @@ name: PR Validation
 # violation on its base branch and two on its head, and asserts that the
 # ratchet reports exactly one new violation. Nothing but running the real thing
 # proves the PMD download, the two scans and the git reads still line up. It
-# also runs the action over a change that touches no Apex at all, because the
-# default names no extensions and what PMD does with a file it has no language
-# for is not something the unit suite can answer.
+# also runs the action over a change that touches nothing the default
+# extensions cover, which has to skip rather than spend a Java download on
+# being told that a flow holds no Apex.
 on:
   pull_request:
     branches:
@@ -90,7 +90,7 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           [ "$NEW" = "1" ] || fail "Expected exactly 1 new violation, got '$NEW'. The fixture adds one empty catch block to a file that already had one, so anything else means the ratchet is counting the inherited violation too, or missing the new one."
           [ "$PREEXISTING" = "1" ] || fail "Expected 1 pre-existing violation, got '$PREEXISTING'."
-          [ "$FILES" = "2" ] || fail "Expected 2 changed files handed to the scanner — the Apex and the flow beside it, since the default narrows by nothing — got '$FILES'."
+          [ "$FILES" = "1" ] || fail "Expected 1 analyzed file: the change also edits a flow, and the default extensions must keep it away from the scanner. Got '$FILES'."
           [ "$OUTCOME" = "passed" ] || fail "With fail-on-new off the outcome should be 'passed', got '$OUTCOME'."
 
       # The same fixture with the ratchet armed, to prove a new violation does
@@ -115,11 +115,10 @@ jobs:
           [ "${{ steps.armed.outcome }}" = "failure" ] || fail "A new violation must fail the step; it reported '${{ steps.armed.outcome }}'."
           [ "${{ steps.armed.outputs.outcome }}" = "failed" ] || fail "The action's own outcome output should be 'failed', got '${{ steps.armed.outputs.outcome }}'."
 
-      # The reason `extensions` is empty by default: a change that touches no
-      # Apex is still a change worth looking at, so the action runs rather than
-      # skipping, and PMD is left to skip the file it has no language for. An
-      # `outcome` of `skipped` here would be the old extension filter back. The
-      # action diffs `base-ref..HEAD`, so the branch is what selects the change.
+      # The other half of the extension filter: a change holding nothing the
+      # default covers has to skip. PMD has no language for a flow, so a run
+      # here could only download a JVM to report nothing. The action diffs
+      # `base-ref..HEAD`, so the branch is what selects the change.
       - name: Point the fixture at the change that touches no Apex
         run: git -C "${{ runner.temp }}/fixture" checkout --quiet metadata-only
 
@@ -134,7 +133,7 @@ jobs:
           comment: 'false'
           setup-java: 'false'
 
-      - name: Check that it scanned rather than skipping
+      - name: Check that it skipped rather than scanning
         env:
           OUTCOME: ${{ steps.metadata.outputs.outcome }}
           NEW: ${{ steps.metadata.outputs.new-violations }}
@@ -142,6 +141,6 @@ jobs:
         run: |
           echo "outcome=$OUTCOME new=$NEW files=$FILES"
           fail() { echo "::error::$1"; exit 1; }
-          [ "$OUTCOME" = "passed" ] || fail "A flow-only change must still be scanned; the outcome was '$OUTCOME', and 'skipped' means the extension filter is back."
-          [ "$FILES" = "1" ] || fail "Expected the flow to be the 1 file handed to the scanner, got '$FILES'."
-          [ "$NEW" = "0" ] || fail "PMD has no language for a flow, so it can report no violations in one; got '$NEW'."
+          [ "$OUTCOME" = "skipped" ] || fail "A change holding nothing the default extensions cover must skip; the outcome was '$OUTCOME'."
+          [ "$FILES" = "0" ] || fail "A skipped run analyzes nothing, so files-analyzed should be 0; got '$FILES'."
+          [ "$NEW" = "0" ] || fail "A skipped run reports no new violations; got '$NEW'."

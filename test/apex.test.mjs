@@ -9,7 +9,7 @@ import {classifyChanges, globToRegExp, isScannedPath, matchesAny} from '../lib/a
  */
 
 const DIRS = ['force-app', 'unpackaged-setup'];
-const EXTENSIONS = ['cls', 'trigger'];
+const EXTENSIONS = ['cls', 'trigger', 'page', 'component'];
 
 describe('isScannedPath', () => {
   it('accepts Apex inside the named directories', () => {
@@ -26,10 +26,24 @@ describe('isScannedPath', () => {
     assert.equal(isScannedPath('force-app/main/default/classes/AccountService.cls-meta.xml', DIRS, EXTENSIONS), false);
   });
 
-  it('covers every path under the directories when no extension was named', () => {
-    // The default. A source directory holds far more than Apex, and a change
-    // to any of it is a change worth looking at; PMD skips what it cannot
-    // parse, so the filter earns nothing and costs whatever it forgot.
+  it('accepts a Visualforce page and component, which PMD has its own language for', () => {
+    assert.ok(isScannedPath('force-app/main/default/pages/Confirm.page', DIRS, EXTENSIONS));
+    assert.ok(isScannedPath('force-app/main/default/components/Banner.component', DIRS, EXTENSIONS));
+  });
+
+  it('refuses what PMD has no language for, or reads badly enough to be worse than silence', () => {
+    // Measured against the distribution, not assumed: an Aura bundle and an
+    // email template map to no PMD language at all, and its Ecmascript parser
+    // predates ES6, so an LWC module comes back as parse errors and then a
+    // violation invented from the wreckage.
+    assert.equal(isScannedPath('force-app/main/default/aura/Banner/Banner.cmp', DIRS, EXTENSIONS), false);
+    assert.equal(isScannedPath('force-app/main/default/email/Welcome.email', DIRS, EXTENSIONS), false);
+    assert.equal(isScannedPath('force-app/main/default/lwc/contactList/contactList.js', DIRS, EXTENSIONS), false);
+    assert.equal(isScannedPath('force-app/main/default/flows/Onboard.flow-meta.xml', DIRS, EXTENSIONS), false);
+  });
+
+  it('covers every path under the directories when the caller clears the filter', () => {
+    // For a ruleset that reaches further than the default list does.
     assert.ok(isScannedPath('force-app/main/default/flows/Onboard.flow-meta.xml', DIRS, []));
     assert.ok(isScannedPath('force-app/main/default/lwc/contactList/contactList.js', DIRS, []));
     assert.equal(isScannedPath('unpackaged-samples/main/default/flows/Sample.flow-meta.xml', DIRS, []), false);

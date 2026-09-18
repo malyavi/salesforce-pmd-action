@@ -141,9 +141,6 @@ describe('renderFullScanSummary', () => {
 
 describe('renderNothingToDo', () => {
   it('passes with a line that names the check', () => {
-    assert.equal(
-      renderNothingToDo('PMD (Apex)'),
-      ':white_check_mark: **PMD (Apex)**: no changes in the scanned paths.'
-    );
+    assert.equal(renderNothingToDo('PMD (Apex)'), ':white_check_mark: **PMD (Apex)**: no analyzable changes.');
   });
 });

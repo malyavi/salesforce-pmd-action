@@ -21,7 +21,7 @@ describe('resolveConfig', () => {
   it('defaults to a Salesforce DX layout with PMD\'s own quickstart ruleset', () => {
     const config = resolveConfig();
     assert.deepEqual(config.sourceDirs, ['force-app']);
-    assert.deepEqual(config.extensions, []);
+    assert.deepEqual(config.extensions, ['cls', 'trigger', 'page', 'component']);
     assert.equal(config.ruleset, 'rulesets/apex/quickstart.xml');
     assert.equal(config.mode, 'auto');
     assert.equal(config.failOnNew, true);

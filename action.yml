@@ -18,12 +18,14 @@ inputs:
     default: force-app
   extensions:
     description: >-
-      Optional narrowing filter: extensions, without the dot, to restrict the
-      scan to. Empty by default, so any change under `source-dirs` runs the
-      scan and PMD decides what it can parse — a filter guessed here is one
-      that silently drops whatever it did not think of.
+      Extensions the scan covers, without the dot. The default is what PMD has
+      a Salesforce language for: Apex, and Visualforce pages and components.
+      Aura bundles and email templates have no PMD language at all, and its
+      JavaScript parser predates ES6, so an LWC module comes back as parse
+      errors. Set it empty to clear the filter and hand PMD every changed file
+      under `source-dirs`.
     required: false
-    default: ''
+    default: cls,trigger,page,component
   ruleset:
     description: >-
       Ruleset to apply — a path in the repository, or one of PMD's own built-in

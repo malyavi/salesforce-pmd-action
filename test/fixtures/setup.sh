@@ -7,10 +7,11 @@
 #   base            one violation, and a flow PMD has no language for
 #   change          a second violation of the same rule in the same file, plus
 #                   an edit to that flow — the ratchet has to report one new
-#                   violation rather than two, and has to be unbothered by a
-#                   changed file the scanner skips
-#   metadata-only   the flow alone — the default names no extensions, so this
-#                   change still runs a scan rather than being skipped
+#                   violation rather than two, and the flow must not reach the
+#                   scanner at all
+#   metadata-only   the flow alone — nothing the default extensions cover, so
+#                   the run has to skip rather than download PMD to be told a
+#                   flow holds no Apex
 #
 # Usage: test/fixtures/setup.sh <directory>
 set -euo pipefail
